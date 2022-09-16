@@ -9,10 +9,10 @@
 
 PRODUCTLIST := loongoffice loongofficedev
 PKGVERSION := $(LIBO_VERSION_MAJOR).$(LIBO_VERSION_MINOR).$(LIBO_VERSION_MICRO)
-PKGVERSIONSHORT := $(LIBO_VERSION_MAJOR).$(LIBO_VERSION_MINOR)
+PKGVERSIONSHORT := 
 PRODUCTNAME.loongoffice := LoongOffice
 PRODUCTNAME.loongofficedev := LoongOfficeDev
-UNIXFILENAME.loongoffice := loongoffice$(PKGVERSIONSHORT)
-UNIXFILENAME.loongofficedev := loongofficedev$(PKGVERSIONSHORT)
+UNIXFILENAME.loongoffice := loongoffice
+UNIXFILENAME.loongofficedev := loongofficedev
 
 # vim: set noet sw=4 ts=4:

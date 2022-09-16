@@ -39,14 +39,14 @@ office_root=${office_prefix}/${PREFIX}
 #this symlink is needed to have the API bootstrap functions running right
 ln -sf "${office_root}/program/soffice" "${DESTDIR}/${BINDIR}/${PREFIX}"
 
-if test "${PREFIX}" != loongoffice${PRODUCTVERSION} -a "${PREFIX}" != loongofficedev${PRODUCTVERSION}  ; then
+if test "${PREFIX}" != loongoffice -a "${PREFIX}" != loongofficedev  ; then
     # compat symlinks
     mkdir -p "${DESTDIR}${office_prefix}"
-    ln -sf loongoffice${PRODUCTVERSION} "${DESTDIR}${office_root}"
-    ln -sf /${BINDIR}/${PREFIX} "${DESTDIR}/${BINDIR}/loongoffice${PRODUCTVERSION}"
+    ln -sf loongoffice "${DESTDIR}${office_root}"
+    ln -sf /${BINDIR}/${PREFIX} "${DESTDIR}/${BINDIR}/loongoffice"
 fi
 
-test "${PREFIX}" = loongofficedev${PRODUCTVERSION} && mime_def_file="loongofficedev${PRODUCTVERSION}.xml" || mime_def_file="loongoffice${PRODUCTVERSION}.xml"
+test "${PREFIX}" = loongofficedev && mime_def_file="loongofficedev.xml" || mime_def_file="loongoffice.xml"
 mkdir -p "${DESTDIR}/${PREFIXDIR}/share/mime/packages"
 cp openoffice.org.xml "${DESTDIR}/${PREFIXDIR}/share/mime/packages/$mime_def_file"
 chmod 0644 "${DESTDIR}/${PREFIXDIR}/share/mime/packages/$mime_def_file"
