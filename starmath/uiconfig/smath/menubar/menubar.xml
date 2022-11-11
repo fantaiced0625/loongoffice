@@ -156,7 +156,6 @@
   <menu:menu menu:id=".uno:HelpMenu">
     <menu:menupopup>
       <menu:menuitem menu:id=".uno:HelpIndex"/>
-      <menu:menuitem menu:id=".uno:ExtendedHelp"/>
       <menu:menuitem menu:id=".uno:TipOfTheDay"/>
       <menu:menuseparator/>
       <menu:menuitem menu:id=".uno:SafeMode"/>
