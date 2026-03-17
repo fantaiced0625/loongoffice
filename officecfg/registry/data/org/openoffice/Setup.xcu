@@ -75,7 +75,7 @@
           <value>scalc</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Calc</value>
+          <value xml:lang="zh-CN">表格</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>CalcWindowState</value>
@@ -119,7 +119,7 @@
           <value>sdraw</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Draw</value>
+          <value xml:lang="zh-CN">绘图</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>DrawWindowState</value>
@@ -163,7 +163,7 @@
           <value>simpress</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Impress</value>
+          <value xml:lang="zh-CN">演示</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>ImpressWindowState</value>
@@ -205,7 +205,7 @@
           <value>smath</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Math</value>
+          <value xml:lang="zh-CN">公式</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>MathWindowState</value>
@@ -249,7 +249,7 @@
           <value>sglobal</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Writer</value>
+          <value xml:lang="zh-CN">文字</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>WriterGlobalWindowState</value>
@@ -293,7 +293,7 @@
           <value>swriter</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Writer</value>
+          <value xml:lang="zh-CN">文字</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>WriterWindowState</value>
@@ -404,7 +404,7 @@
           <value>swxform</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value xml:lang="en-US">XML Form Document</value>
+          <value xml:lang="zh-CN">XML 表单文档</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>XFormsWindowState</value>
@@ -446,7 +446,7 @@
           <value>sweb</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Writer/Web</value>
+          <value xml:lang="zh-CN">文字/网络</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>WriterWebWindowState</value>
@@ -624,7 +624,7 @@
           <value>GenericCategories</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Bibliography</value>
+          <value xml:lang="zh-CN">参考文献</value>
         </prop>
       </node>
       <node oor:name="com.sun.star.script.BasicIDE" oor:op="replace">
@@ -701,7 +701,7 @@
           <value>schart</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Chart</value>
+          <value xml:lang="zh-CN">图表</value>
         </prop>
         <prop oor:name="ooSetupFactoryWindowStateConfigRef">
           <value>ChartWindowState</value>
@@ -749,7 +749,7 @@
           <value>GenericCategories</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value>Base</value>
+          <value xml:lang="zh-CN">数据库</value>
         </prop>
       </node>
       <node oor:name="com.sun.star.report.ReportDefinition" oor:op="replace" install:module="reportbuilder">
@@ -769,7 +769,7 @@
           <value>GenericCategories</value>
         </prop>
         <prop oor:name="ooSetupFactoryUIName">
-          <value xml:lang="en-US">Base: Report Builder</value>
+          <value xml:lang="zh-CN">数据库: 报表生成器</value>
         </prop>
       </node>
     </node>
