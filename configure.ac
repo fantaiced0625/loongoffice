@@ -5550,6 +5550,7 @@ linux-gnu*|linux-musl*)
         CPUNAME=MIPS64
         RTL_ARCH=MIPS64_EL
         EPM_FLAGS="-a mips64el"
+        EPM_FLAGS="-a mips64el -nm"
         PLATFORMID=linux_mips64_el
         ;;
     mipsel)
@@ -5607,6 +5608,7 @@ linux-gnu*|linux-musl*)
     loongarch64)
         CPUNAME=LOONGARCH64
         RTL_ARCH=LOONGARCH64
+        EPM_FLAGS="-a loongarch64 -nm"
         PLATFORMID=linux_loongarch64
         ;;
     *)
