@@ -31,6 +31,28 @@ if [ -f "$PATCH_FILE" ]; then
     cd "$SCRIPT_DIR"  # 回到 build 目录
 fi
 
+# === OFD 阅读器扩展下载 ===
+OFD_CACHE_DIR="${SCRIPT_DIR}/cache/ofdreader"
+OFD_CACHE_FILE="${OFD_CACHE_DIR}/loongoffice-ofd-extension.oxt"
+mkdir -p "$OFD_CACHE_DIR"
+
+if [ ! -f "$OFD_CACHE_FILE" ] || [ ! -s "$OFD_CACHE_FILE" ]; then
+    echo "正在下载 OFD 扩展..."
+    wget -O "$OFD_CACHE_FILE" \
+        "https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.0.0/loongoffice-ofd-extension.oxt"
+fi
+
+# === 批量打印 ===
+PRINT_BATCHER_CACHE_DIR="cache/print-batcher"
+PRINT_BATCHER_CACHE_FILE="${PRINT_BATCHER_CACHE_DIR}/loongbatchprint_1.0.0-1_loong64.deb"
+mkdir -p "$PRINT_BATCHER_CACHE_DIR"
+
+if [ ! -f "$PRINT_BATCHER_CACHE_FILE" ] || [ ! -s "$PRINT_BATCHER_CACHE_FILE" ]; then
+    echo "正在下载批量打印扩展..."
+    wget -O "$PRINT_BATCHER_CACHE_FILE" \
+        "http://10.156.0.106:9001/browser/loongsxapp/LoongOffice/loongbatchprint_1.0.0-1_loong64.deb"
+fi
+
 ./autogen.sh --with-help --disable-firebird-sdbc --with-system-postgresql --with-lang="zh-CN" --disable-librelogo --with-package-format=${PACKAGEFORMAT} --enable-epm --enable-release-build --enable-odk --with-vendor=Loongson --enable-qt6-multimedia --enable-qt6 --enable-kf6 --enable-gstreamer-1-0 && make
 
 if [ -d ./out ]; then
@@ -92,47 +114,76 @@ dpkg-deb -x ./loongoffice-pyuno_25.8.7.0.0-1_${MACHINE}.deb extract
 dpkg-deb -x ./loongoffice-graphicfilter_25.8.7.0.0-1_${MACHINE}.deb extract
 #dpkg-deb -x ./loongoffice-ogltrans_25.8.7.0.0-1_${MACHINE}.deb extract
 
+dpkg-deb -x ./loongbatchprint_1.0.0-1_loong64.deb extract
+
 dpkg-deb -e ./loongoffice-debian-menus_25.8.7-0_all.deb extract/DEBIAN
+
+# 提取 loongbatchprint 的依赖（排除 loongoffice 自身）
+BATCHER_DEPENDS=$(dpkg-deb -f ./loongbatchprint_1.0.0-1_loong64.deb Depends 2>/dev/null | sed 's/loongoffice, //' | sed 's/loongoffice$//' | sed 's/, *$//')
+
 dpkg-deb -e ./loongoffice_25.8.7.0.0-1_${MACHINE}.deb extract/DEBIAN
 
 dpkg-deb -x ./loongoffice-sdk_25.8.7.0.0-1_${MACHINE}.deb extract-sdk
 dpkg-deb -e ./loongoffice-sdk_25.8.7.0.0-1_${MACHINE}.deb extract-sdk/DEBIAN
 
 sed -i "s/25.8.7.0.0-1$/25.8.7.0.0-1.lnd.1.0.0001/g" extract/DEBIAN/control
-sed -i "s/.*Installed-Size.*/Installed-Size:\ `du -sk extract | awk '{print $1}'`/g" extract/DEBIAN/control
+sed -i "s/.*Installed-Size.*/Installed-Size: `du -sk extract | awk '{print $1}'`/g" extract/DEBIAN/control
+sed -i "s/Architecture: loongarch64/Architecture: loong64/g" extract/DEBIAN/control
+
+# 删除 loongbatchprint 已有的 Section 和 Priority（后续会重新添加）
+sed -i "/^Section:/d" extract/DEBIAN/control
+sed -i "/^Priority:/d" extract/DEBIAN/control
+
 echo "Replaces: loongoffice-zh-cn,loongofficebasis-zh-cn-help,loongofficebasis-zh-cn,loongoffice-debian-menus" >> extract/DEBIAN/control
 echo "Conflicts: loongoffice-zh-cn,loongofficebasis-zh-cn-help,loongofficebasis-zh-cn,loongoffice-debian-menus" >> extract/DEBIAN/control
+
+
+# 追加 loongbatchprint 的依赖（排除 loongoffice）
+if [ -n "$BATCHER_DEPENDS" ]; then
+    echo "Depends: default-jre, ${BATCHER_DEPENDS}" >> extract/DEBIAN/control
+else
+    echo "Depends: default-jre" >> extract/DEBIAN/control
+fi
+
 echo "Section: editors" >> extract/DEBIAN/control
 echo "Priority: optional" >> extract/DEBIAN/control
 
-# 安装 OFD 阅读器扩展（使用 bundled 方式）
+# 安装 OFD 阅读器扩展（使用缓存）
 mkdir -p extract/opt/loongoffice/share/extensions/ofdreader/
-OFD_DIR="extract/opt/loongoffice/share/extensions/ofdreader"
-
-# 下载扩展文件（如果不存在或为空）
-if [ ! -f "$OFD_DIR/loongoffice-ofd-extension.oxt" ] || [ ! -s "$OFD_DIR/loongoffice-ofd-extension.oxt" ]; then
-    echo "正在下载 OFD 扩展..."
-    wget -O "$OFD_DIR/loongoffice-ofd-extension.oxt" \
-        "https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.0.0/loongoffice-ofd-extension.oxt"
+if [ -f "$OFD_CACHE_FILE" ]; then
+    unzip -o "$OFD_CACHE_FILE" -d extract/opt/loongoffice/share/extensions/ofdreader/ 2>/dev/null
 fi
-
-# 解压到目录
-cd "$OFD_DIR"
-unzip -o loongoffice-ofd-extension.oxt 2>/dev/null
-rm -f loongoffice-ofd-extension.oxt
-cd -
 
 # 设置权限
 find extract/opt/loongoffice/share/extensions/ofdreader/ -type f -exec chmod 644 {} \;
 find extract/opt/loongoffice/share/extensions/ofdreader/ -type d -exec chmod 755 {} \;
 
-echo "OFD 扩展安装脚本准备完成"
+# 创建 OFD desktop 文件
+mkdir -p extract/usr/share/applications/
+cat > extract/usr/share/applications/loongoffice-ofd.desktop << 'EOF'
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LoongOffice Draw (OFD)
+Name[zh_CN]=LoongOffice 绘图 (OFD)
+Comment=Open OFD files with LoongOffice 绘图
+Comment[zh_CN]=使用LoongOffice 绘图打开OFD文件
+Exec=loongoffice --draw %U
+Icon=loongoffice-draw
+Terminal=false
+Categories=Office;Graphics;
+MimeType=application/ofd;
+StartupNotify=true
+EOF
+
+
+echo "OFD 扩展安装完成"
 
 if [ ! -d ./build ]; then
     mkdir ./build
 fi
 
-dpkg-deb -b extract build && cp -a build/*.deb .
+dpkg-deb --build --root-owner-group extract build && cp -a build/*.deb .
 
 cd ..
 

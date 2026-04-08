@@ -46,6 +46,7 @@ $(deb_WORKDIR)/%/DEBIAN/control: $(deb_SRCDIR)/control $(gb_CustomTarget_workdir
 		ICON_PREFIX=$(UNIXFILENAME.$*) \
 		KDEMAINDIR=/usr \
 		PREFIXDIR=/usr \
+		SOURCE_DIR=$(SRCDIR)/sysui/desktop/share \
 		./create_tree.sh
 	sed $(deb_SRCDIR)/openoffice.org-debian-menus \
 		-e 's/%PRODUCTNAME/$(PRODUCTNAME.$*)/' \
