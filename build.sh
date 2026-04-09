@@ -158,25 +158,6 @@ fi
 find extract/opt/loongoffice/share/extensions/ofdreader/ -type f -exec chmod 644 {} \;
 find extract/opt/loongoffice/share/extensions/ofdreader/ -type d -exec chmod 755 {} \;
 
-# 创建 OFD desktop 文件
-mkdir -p extract/usr/share/applications/
-cat > extract/usr/share/applications/loongoffice-ofd.desktop << 'EOF'
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=LoongOffice Draw (OFD)
-Name[zh_CN]=LoongOffice 绘图 (OFD)
-Comment=Open OFD files with LoongOffice 绘图
-Comment[zh_CN]=使用LoongOffice 绘图打开OFD文件
-Exec=loongoffice --draw %U
-Icon=loongoffice-draw
-Terminal=false
-Categories=Office;Graphics;
-MimeType=application/ofd;
-StartupNotify=true
-EOF
-
-
 echo "OFD 扩展安装完成"
 
 if [ ! -d ./build ]; then
