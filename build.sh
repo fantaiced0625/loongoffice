@@ -8,52 +8,7 @@ elif [ -e /etc/redhat-release ]; then
     PACKAGEFORMAT=rpm
 fi
 
-echo "== apply translations patch =="
-
-# 获取脚本所在目录的绝对路径（build 目录）
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BUILD_DIR="$(dirname "$SCRIPT_DIR")"  # 25.8
-
-PATCH_FILE="${BUILD_DIR}/loongoffice/translations/rehearse-timings-zh-CN.patch"
-TRANS_DIR="${BUILD_DIR}/translations"
-
-if [ -f "$PATCH_FILE" ]; then
-    cd "$TRANS_DIR"
-
-    # 防止重复应用
-    if git apply --check "$PATCH_FILE" 2>/dev/null; then
-        git apply "$PATCH_FILE"
-        echo "patch applied"
-    else
-        echo "patch already applied or conflict"
-    fi
-
-    cd "$SCRIPT_DIR"  # 回到 build 目录
-fi
-
-# === OFD 阅读器扩展下载 ===
-OFD_CACHE_DIR="${SCRIPT_DIR}/cache/ofdreader"
-OFD_CACHE_FILE="${OFD_CACHE_DIR}/loongoffice-ofd-extension.oxt"
-mkdir -p "$OFD_CACHE_DIR"
-
-if [ ! -f "$OFD_CACHE_FILE" ] || [ ! -s "$OFD_CACHE_FILE" ]; then
-    echo "正在下载 OFD 扩展..."
-    wget -O "$OFD_CACHE_FILE" \
-        "https://github.com/fanta0625/libreoffice-ofd-extension/releases/download/v1.0.0/loongoffice-ofd-extension.oxt"
-fi
-
-# === 批量打印 ===
-PRINT_BATCHER_CACHE_DIR="cache/print-batcher"
-PRINT_BATCHER_CACHE_FILE="${PRINT_BATCHER_CACHE_DIR}/loongbatchprint_1.0.0-1_loong64.deb"
-mkdir -p "$PRINT_BATCHER_CACHE_DIR"
-
-if [ ! -f "$PRINT_BATCHER_CACHE_FILE" ] || [ ! -s "$PRINT_BATCHER_CACHE_FILE" ]; then
-    echo "正在下载批量打印扩展..."
-    wget -O "$PRINT_BATCHER_CACHE_FILE" \
-        "http://10.156.0.106:9001/browser/loongsxapp/LoongOffice/loongbatchprint_1.0.0-1_loong64.deb"
-fi
-
-./autogen.sh --with-help --disable-firebird-sdbc --with-system-postgresql --with-lang="zh-CN" --disable-librelogo --with-package-format=${PACKAGEFORMAT} --enable-epm --enable-release-build --enable-odk --with-vendor=Loongson --enable-qt6-multimedia --enable-qt6 --enable-kf6 --enable-gstreamer-1-0 && make
+./autogen.sh --with-help --disable-firebird-sdbc --with-system-postgresql --with-lang="zh-CN" --disable-librelogo --with-package-format=${PACKAGEFORMAT} --enable-epm --enable-release-build --enable-odk --with-vendor=Loongson --enable-qt6-multimedia --enable-qt6 --enable-kf6 --enable-gstreamer-1-0 --enable-ext-ofdreader --enable-ext-batchprint && make
 
 if [ -d ./out ]; then
     rm -rf ./out
@@ -114,12 +69,12 @@ dpkg-deb -x ./loongoffice-pyuno_25.8.7.0.0-1_${MACHINE}.deb extract
 dpkg-deb -x ./loongoffice-graphicfilter_25.8.7.0.0-1_${MACHINE}.deb extract
 #dpkg-deb -x ./loongoffice-ogltrans_25.8.7.0.0-1_${MACHINE}.deb extract
 
-dpkg-deb -x ./loongbatchprint_1.0.0-1_loong64.deb extract
+dpkg-deb -x ../external/tarballs/loongbatchprint_1.0.0-1_loong64.deb extract
 
 dpkg-deb -e ./loongoffice-debian-menus_25.8.7-0_all.deb extract/DEBIAN
 
 # 提取 loongbatchprint 的依赖（排除 loongoffice 自身）
-BATCHER_DEPENDS=$(dpkg-deb -f ./loongbatchprint_1.0.0-1_loong64.deb Depends 2>/dev/null | sed 's/loongoffice, //' | sed 's/loongoffice$//' | sed 's/, *$//')
+BATCHER_DEPENDS=$(dpkg-deb -f ../external/tarballs/loongbatchprint_1.0.0-1_loong64.deb Depends 2>/dev/null | sed 's/loongoffice, //' | sed 's/loongoffice$//' | sed 's/, *$//')
 
 dpkg-deb -e ./loongoffice_25.8.7.0.0-1_${MACHINE}.deb extract/DEBIAN
 
@@ -147,18 +102,6 @@ fi
 
 echo "Section: editors" >> extract/DEBIAN/control
 echo "Priority: optional" >> extract/DEBIAN/control
-
-# 安装 OFD 阅读器扩展（使用缓存）
-mkdir -p extract/opt/loongoffice/share/extensions/ofdreader/
-if [ -f "$OFD_CACHE_FILE" ]; then
-    unzip -o "$OFD_CACHE_FILE" -d extract/opt/loongoffice/share/extensions/ofdreader/ 2>/dev/null
-fi
-
-# 设置权限
-find extract/opt/loongoffice/share/extensions/ofdreader/ -type f -exec chmod 644 {} \;
-find extract/opt/loongoffice/share/extensions/ofdreader/ -type d -exec chmod 755 {} \;
-
-echo "OFD 扩展安装完成"
 
 if [ ! -d ./build ]; then
     mkdir ./build
