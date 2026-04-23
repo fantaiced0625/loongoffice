@@ -716,5 +716,5 @@ OFDREADER_TARBALL := loongoffice-ofd-extension.oxt
 # three static lines
 # so that git cherry-pick
 # will not run into conflicts
-BATCHPRINT_SHA256SUM := 9e65a07084d3d754f2e24f307c78b31df3dd6fff876e0414a48761f4a41613df
-BATCHPRINT_TARBALL := loongbatchprint_1.0.0-1_loong64.deb
+BATCHPRINT_SHA256SUM := 973d6434a2cd562b4b04f894b813663ddc9fda1386a585972328d71d3b011e61
+BATCHPRINT_TARBALL := loongbatchprint_1.0.0-1.lnd.1_loong64.deb
