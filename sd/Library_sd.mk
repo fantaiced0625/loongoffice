@@ -202,6 +202,11 @@ $(eval $(call gb_Library_add_exception_objects,sd,\
 	sd/source/filter/html/htmlex \
 	sd/source/filter/html/sdhtmlfilter \
 	sd/source/filter/pdf/sdpdffilter \
+	sd/source/filter/pdf/SdrPdfCachedPageObj \
+	sd/source/filter/pdf/ViewContactOfPdfCachedPage \
+	sd/source/filter/pdf/PdfSharedDocument \
+	sd/source/filter/pdf/PdfBitmapCache \
+	sd/source/filter/pdf/PdfPagePrimitive2D \
 	sd/source/filter/sdfilter \
 	sd/source/filter/sdpptwrp \
 	sd/source/filter/xml/sdtransform \

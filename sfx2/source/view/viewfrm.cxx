@@ -20,6 +20,7 @@
 #include <config_feature_desktop.h>
 #include <config_wasm_strip.h>
 
+#include <cstdio>
 #include <o3tl/test_info.hxx>
 #include <osl/file.hxx>
 #include <sfx2/docfilt.hxx>
@@ -596,10 +597,20 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                 }
                 else
                 {
-                    aReadOnlyUIGuard.m_pMed = pMed;
-                    rReq.SetReturnValue( SfxBoolItem( rReq.GetSlot(), true ) );
-                    rReq.Done( true );
-                    return;
+                    // For PDF viewer (draw_pdf_import), skip the early return
+                    // so the code falls through to a full SID_RELOAD, which
+                    // creates a new DocShell and calls SdPdfFilter::Import()
+                    // with SID_SILENT set, triggering the old SdrGrafObj pipeline.
+                    if (!pMed->GetFilter()
+                        || pMed->GetFilter()->GetName() != "draw_pdf_import")
+                    {
+                        aReadOnlyUIGuard.m_pMed = pMed;
+                        rReq.SetReturnValue( SfxBoolItem( rReq.GetSlot(), true ) );
+                        rReq.Done( true );
+                        return;
+                    }
+                    // fall through to full reload below
+                    fprintf(stderr, "[ExecReload] draw_pdf_import: falling through to SID_RELOAD\n");
                 }
             }
 

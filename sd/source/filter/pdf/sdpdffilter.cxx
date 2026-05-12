@@ -19,7 +19,11 @@
 
 #include <sal/config.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <sfx2/docfile.hxx>
+#include <sfx2/sfxsids.hrc>
+#include <DrawDocShell.hxx>
 #include <svx/svdograf.hxx>
 #include <o3tl/safeint.hxx>
 
@@ -29,6 +33,7 @@
 
 #include <vcl/graph.hxx>
 #include <vcl/pdfread.hxx>
+#include <tools/UnitConversion.hxx>
 
 #include <Annotation.hxx>
 
@@ -36,6 +41,10 @@
 #include <com/sun/star/text/XText.hpp>
 
 #include <basegfx/polygon/b2dpolygontools.hxx>
+
+#include "PdfSharedDocument.hxx"
+#include "PdfBitmapCache.hxx"
+#include "SdrPdfCachedPageObj.hxx"
 
 using namespace css;
 
@@ -46,10 +55,84 @@ SdPdfFilter::SdPdfFilter(SfxMedium& rMedium, sd::DrawDocShell& rDocShell)
 
 SdPdfFilter::~SdPdfFilter() {}
 
+namespace {
+
+bool ImportFast(SdDrawDocument& rDocument, sd::DrawDocShell& rDocShell,
+                const OUString& rFileName)
+{
+    auto pSharedDoc = std::make_shared<sd::PdfSharedDocument>();
+    if (!pSharedDoc->loadFromFile(rFileName))
+        return false;
+
+    auto pCache = std::make_shared<sd::PdfBitmapCache>(pSharedDoc);
+    int nPageCount = pSharedDoc->getPageCount();
+    if (nPageCount <= 0)
+        return false;
+
+    bool bWasLocked = rDocument.isLocked();
+    rDocument.setLock(true);
+    const bool bSavedUndoEnabled = rDocument.IsUndoEnabled();
+    rDocument.EnableUndo(false);
+
+    SdrModel& rModel = rDocument;
+
+    rDocument.CreateFirstPages();
+    sal_uInt16 nPageToDuplicate = 0;
+    for (int i = 0; i < nPageCount - 1; ++i)
+    {
+        nPageToDuplicate = rDocument.DuplicatePage(nPageToDuplicate);
+    }
+
+    for (int nPageIndex = 0; nPageIndex < nPageCount; ++nPageIndex)
+    {
+        SdPage* pPage = rDocument.GetSdPage(nPageIndex, PageKind::Standard);
+        if (!pPage)
+            return false;
+
+        basegfx::B2DSize aPageSizePts = pSharedDoc->getPageSize(nPageIndex);
+        Size aSizeHMM(
+            static_cast<tools::Long>(std::round(convertPointToMm100(aPageSizePts.getWidth()))),
+            static_cast<tools::Long>(std::round(convertPointToMm100(aPageSizePts.getHeight()))));
+        pPage->SetSize(aSizeHMM);
+
+        rtl::Reference<sd::SdrPdfCachedPageObj> pObj = new sd::SdrPdfCachedPageObj(
+            rModel, pSharedDoc, pCache, nPageIndex,
+            tools::Rectangle(Point(), aSizeHMM));
+        pObj->SetResizeProtect(true);
+        pObj->SetMoveProtect(true);
+        pPage->InsertObject(pObj.get());
+    }
+
+    rDocument.setLock(bWasLocked);
+    rDocument.EnableUndo(bSavedUndoEnabled);
+
+    rDocShell.SetReadOnlyUI(true);
+
+    pCache->prefetchFirstPages(std::min(6, nPageCount));
+
+    return true;
+}
+
+} // anonymous namespace
+
 bool SdPdfFilter::Import()
 {
     const OUString aFileName(
         mrMedium.GetURLObject().GetMainURL(INetURLObject::DecodeMechanism::NONE));
+
+    // First open: use fast viewer-only pipeline.
+    // Edit mode: set env LO_PDF_EDIT_MODE=1 or reload with SID_SILENT.
+    const SfxBoolItem* pSilentItem = mrMedium.GetItemSet().GetItem(SID_SILENT, false);
+    const bool bEditMode = (pSilentItem && pSilentItem->GetValue()) || getenv("LO_PDF_EDIT_MODE");
+    fprintf(stderr, "[SdPdfFilter] SID_SILENT=%s bEditMode=%d\n",
+            pSilentItem ? (pSilentItem->GetValue() ? "true" : "false") : "absent",
+            bEditMode ? 1 : 0);
+    if (!bEditMode)
+        return ImportFast(mrDocument, mrDocShell, aFileName);
+
+    fprintf(stderr, "[SdPdfFilter] EDIT MODE: using original SdrGrafObj pipeline\n");
+
+    // ======== Original code below: edit mode via SdrGrafObj ========
 
     std::vector<vcl::PDFGraphicResult> aGraphics;
     if (vcl::ImportPDFUnloaded(aFileName, aGraphics) == 0)
