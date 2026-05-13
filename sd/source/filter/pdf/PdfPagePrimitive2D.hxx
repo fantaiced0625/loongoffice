@@ -31,6 +31,7 @@ private:
     std::shared_ptr<PdfSharedDocument> m_pDoc;
     std::shared_ptr<PdfBitmapCache>    m_pCache;
     int                                m_nPageIndex;
+    int                                m_nRenderGeneration;
     basegfx::B2DHomMatrix              m_aObjectTransform;
     basegfx::B2DRange                  m_aObjectRange;
 

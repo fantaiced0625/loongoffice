@@ -14,10 +14,13 @@
 #include <memory>
 #include <map>
 #include <list>
+#include <set>
+#include <queue>
 #include <thread>
 #include <mutex>
 #include <atomic>
 #include <condition_variable>
+#include <functional>
 
 namespace sd {
 
@@ -37,9 +40,23 @@ public:
     explicit PdfBitmapCache(std::shared_ptr<PdfSharedDocument> pDoc);
     ~PdfBitmapCache();
 
+    // Non-blocking: returns cached bitmap or scaled placeholder immediately.
+    // If exact size is not cached, queues a background render and returns a
+    // scaled version of any existing cached bitmap for the page (or renders
+    // synchronously if nothing is cached yet).
     BitmapEx getOrRender(int nPage, const Size& rPixelSize);
+
     void prefetchFirstPages(int nCount);
     void cancelPrefetch();
+
+    // Register a callback to be invoked (on the main thread) when a
+    // background render completes. Returns an ID for later removal.
+    int addRepaintCallback(std::function<void()> aCallback);
+    void removeRepaintCallback(int nId);
+
+    // Returns the current render generation counter.
+    // Incremented each time a new bitmap is added to the cache.
+    int getRenderGeneration() const { return m_nRenderGeneration.load(); }
 
 private:
     struct CachedBitmap {
@@ -54,14 +71,28 @@ private:
     size_t m_CurrentMemory = 0;
     std::mutex m_Mutex;
 
-    // Background prefetch — render pages sequentially from 0 upward
+    // Background thread — handles both prefetch and on-demand (zoom) renders
     std::thread m_PrefetchThread;
     int m_nPrefetchEndPage = 0;
     std::condition_variable m_Condition;
     std::atomic<bool> m_bRunning{true};
 
+    // On-demand render queue (zoom changes)
+    std::queue<RenderKey> m_PendingQueue;
+    std::set<RenderKey>   m_PendingSet;
+
+    // Render generation: incremented each time a bitmap is added to cache.
+    // Used by PdfPagePrimitive2D::operator== to detect stale decompositions.
+    std::atomic<int> m_nRenderGeneration{0};
+
+    // Repaint callbacks (called on main thread after background render)
+    std::map<int, std::function<void()>> m_aRepaintCallbacks;
+    int m_nNextCallbackId = 0;
+
     void prefetchLoop();
     void evictLRU(size_t targetMemory);
+    void addToCache(const RenderKey& rKey, const BitmapEx& rBitmap);
+    void postRepaintEvent();
 };
 
 } // namespace sd

@@ -408,11 +408,21 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                 // if only the view was in the readonly mode then there is no need to do the reload
                 if ( !pSh->IsReadOnlyMedium() )
                 {
-                    // SetReadOnlyUI causes recomputation of window title, using
-                    // open mode among other things, so call SetOpenMode before
-                    // SetReadOnlyUI:
-                    pMed->SetOpenMode( nOpenMode );
-                    return;
+                    // For PDF viewer (fast import pipeline), we must do a full
+                    // reload to switch to the editable SdrGrafObj pipeline.
+                    // For all other formats, just flip the open mode.
+                    bool bIsPdfViewer = pMed->GetFilter()
+                        && pMed->GetFilter()->GetName() == "draw_pdf_import";
+                    if (!bIsPdfViewer)
+                    {
+                        // SetReadOnlyUI causes recomputation of window title, using
+                        // open mode among other things, so call SetOpenMode before
+                        // SetReadOnlyUI:
+                        pMed->SetOpenMode( nOpenMode );
+                        return;
+                    }
+                    // fall through to full reload below
+                    fprintf(stderr, "[ExecReload] draw_pdf_import: skipping early return, forcing full reload\n");
                 }
             }
 
@@ -620,6 +630,10 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                      && (!pSh->IsOriginallyReadOnlyMedium() || pSh->IsOriginallyLoadedReadOnlyMedium()))
                     || bNeedsReload) );
             rReq.AppendItem( SfxBoolItem( SID_SILENT, true ));
+            // For PDF viewer edit: propagate edit intent so ImportFast()
+            // knows to skip SetReadOnlyUI(true).
+            if ( rReq.GetSlot() == SID_EDITDOC )
+                rReq.AppendItem( SfxBoolItem( SID_EDITDOC, true ) );
 
             [[fallthrough]]; //TODO ???
         }
@@ -650,6 +664,11 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
             const SfxStringItem* pURLItem = rReq.GetArg<SfxStringItem>(SID_FILE_NAME);
             // Open as editable?
             bool bForEdit = !pSh->IsReadOnly();
+            // For PDF viewer edit: the document is read-only UI (set by
+            // ImportFast), so IsReadOnly() returns true and bForEdit would
+            // be false.  Override to true so the reloaded document is editable.
+            if (!bForEdit && rReq.GetSlot() == SID_EDITDOC)
+                bForEdit = true;
 
             // If possible ask the User
             bool bDo = GetViewShell()->PrepareClose();

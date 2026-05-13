@@ -24,9 +24,15 @@ SdrPdfCachedPageObj::SdrPdfCachedPageObj(
     , m_pCache(std::move(pCache))
     , m_nPageIndex(nPageIndex)
 {
+    if (m_pCache)
+        m_nRepaintCallbackId = m_pCache->addRepaintCallback([this]() { ActionChanged(); });
 }
 
-SdrPdfCachedPageObj::~SdrPdfCachedPageObj() = default;
+SdrPdfCachedPageObj::~SdrPdfCachedPageObj()
+{
+    if (m_pCache && m_nRepaintCallbackId >= 0)
+        m_pCache->removeRepaintCallback(m_nRepaintCallbackId);
+}
 
 std::unique_ptr<sdr::contact::ViewContact> SdrPdfCachedPageObj::CreateObjectSpecificViewContact()
 {

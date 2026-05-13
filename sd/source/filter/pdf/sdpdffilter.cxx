@@ -106,7 +106,24 @@ bool ImportFast(SdDrawDocument& rDocument, sd::DrawDocShell& rDocShell,
     rDocument.setLock(bWasLocked);
     rDocument.EnableUndo(bSavedUndoEnabled);
 
-    rDocShell.SetReadOnlyUI(true);
+    // Only set read-only UI if NOT in edit mode.
+    // When the user clicks "Edit Document", viewfrm.cxx adds SID_EDITDOC
+    // to the medium's item set before reloading, signaling that we should
+    // open as editable.
+    const SfxBoolItem* pEditItem = rDocShell.GetMedium()
+        ? rDocShell.GetMedium()->GetItemSet().GetItem(SID_EDITDOC, false)
+        : nullptr;
+    if (!pEditItem || !pEditItem->GetValue())
+    {
+        rDocShell.SetReadOnlyUI(true);
+        // Set full read-only locks to prevent editing, saving, exporting, etc.
+        SfxItemSet& rSet = rDocShell.GetMedium()->GetItemSet();
+        rSet.Put(SfxBoolItem(SID_LOCK_EDITDOC, true));
+        rSet.Put(SfxBoolItem(SID_LOCK_SAVE, true));
+        rSet.Put(SfxBoolItem(SID_LOCK_EXPORT, true));
+        rSet.Put(SfxBoolItem(SID_LOCK_CONTENT_EXTRACTION, true));
+        rDocShell.SetLoadReadonly(true);
+    }
 
     pCache->prefetchFirstPages(std::min(6, nPageCount));
 

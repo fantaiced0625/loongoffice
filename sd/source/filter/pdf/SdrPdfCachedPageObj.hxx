@@ -47,6 +47,7 @@ private:
     std::shared_ptr<PdfSharedDocument> m_pSharedDoc;
     std::shared_ptr<PdfBitmapCache> m_pCache;
     int m_nPageIndex;
+    int m_nRepaintCallbackId = -1;
 };
 
 } // namespace sd

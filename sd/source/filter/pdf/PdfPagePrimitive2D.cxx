@@ -27,6 +27,7 @@ PdfPagePrimitive2D::PdfPagePrimitive2D(
     , m_pDoc(std::move(pDoc))
     , m_pCache(std::move(pCache))
     , m_nPageIndex(nPageIndex)
+    , m_nRenderGeneration(m_pCache ? m_pCache->getRenderGeneration() : 0)
     , m_aObjectTransform(rObjectTransform)
     , m_aObjectRange(rObjectRange)
 {
@@ -46,11 +47,14 @@ PdfPagePrimitive2D::create2DDecomposition(const drawinglayer::geometry::ViewInfo
     int nPixelWidth = static_cast<int>(std::round(std::abs(aViewSize.getX())));
     int nPixelHeight = static_cast<int>(std::round(std::abs(aViewSize.getY())));
 
-    // Clamp to reasonable bounds
+    // Clamp to reasonable bounds.  At high zoom only a small portion of the
+    // page is visible, so rendering the full page at extreme resolution is
+    // both wasteful and slow.  Cap at 2048 px (~200% for A4@96 DPI) and let
+    // the display layer scale up for higher zoom levels.
     if (nPixelWidth < 1)  nPixelWidth = 1;
-    if (nPixelWidth > 8192) nPixelWidth = 8192;
+    if (nPixelWidth > 2048) nPixelWidth = 2048;
     if (nPixelHeight < 1)  nPixelHeight = 1;
-    if (nPixelHeight > 8192) nPixelHeight = 8192;
+    if (nPixelHeight > 2048) nPixelHeight = 2048;
 
     // Get rendered bitmap at the exact resolution needed for this view
     BitmapEx aBitmapEx = m_pCache->getOrRender(m_nPageIndex, Size(nPixelWidth, nPixelHeight));
@@ -71,6 +75,7 @@ bool PdfPagePrimitive2D::operator==(const drawinglayer::primitive2d::BasePrimiti
         return false;
     const auto& rOther = static_cast<const PdfPagePrimitive2D&>(rPrimitive);
     return m_nPageIndex == rOther.m_nPageIndex
+        && m_nRenderGeneration == rOther.m_nRenderGeneration
         && m_aObjectTransform == rOther.m_aObjectTransform
         && m_aObjectRange == rOther.m_aObjectRange;
 }

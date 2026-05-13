@@ -1006,4 +1006,160 @@ BitmapEx SdrPdfCachedPageObj::getPageBitmap() const
 
 ---
 
+## 6. Okular 高缩放性能机制：分块渲染（Tiled Rendering）
+
+### 6.1 问题背景
+
+自定义管线（第 5 节）实现后，300% 以内缩放流畅，但超过 300% 后明显卡顿。根本原因是当前实现始终渲染**整页全分辨率位图**：
+
+| 缩放 | A4 页面像素 | 内存 (32bpp) | PDFium 渲染耗时 |
+|------|------------|-------------|----------------|
+| 100% | ~2480×3508 | ~33 MB | 快 |
+| 200% | ~4960×7016 | ~133 MB | 可接受 |
+| 300% | ~7440×10524 | ~299 MB | 慢 |
+| 400% | 8192×11585 | ~362 MB | 极慢 |
+
+高缩放时用户只看到页面的一小部分，但仍然渲染整页，极其浪费。
+
+### 6.2 Okular 的分块渲染机制
+
+Okular 在高缩放下依然流畅（支持到 10000%），核心是**四叉树分块渲染**。
+
+#### 6.2.1 分块激活条件
+
+**文件：** `core/document.cpp:1393-1435`
+
+```cpp
+const long screenSize = screen->devicePixelRatio() * screen->size().width()
+                      * screen->devicePixelRatio() * screen->size().height();
+
+// 当请求的像素面积 > 4×屏幕像素面积，且不是在渲染页面的 75% 以上时
+if (!tilesManager && m_generator->hasFeature(Generator::TiledRendering)
+    && (long)r->width() * (long)r->height() > 4L * screenSize
+    && normalizedArea < 0.75)
+{
+    // 创建 TilesManager，开始分块模式
+}
+
+// 当请求的像素面积 < 3×屏幕像素面积时，退出分块模式
+else if (tilesManager
+    && (long)r->width() * (long)r->height() < 3L * screenSize)
+{
+    // 销毁 TilesManager，回到整页模式
+}
+```
+
+滞回区间 3×~4× 屏幕面积，避免在阈值附近反复切换。
+
+#### 6.2.2 四叉树分块结构
+
+**文件：** `core/tilesmanager.cpp`
+
+```
+页面
+├─ 初始 4×4 = 16 个 tile
+│  ├─ tile 0: rect(0, 0, 0.25, 0.25)
+│  ├─ tile 1: rect(0.25, 0, 0.5, 0.25)
+│  └─ ...
+│
+└─ 当单个 tile 像素面积 ≥ 2,000,000 时，递归 4 分
+   ├─ sub-tile 0
+   ├─ sub-tile 1
+   ├─ sub-tile 2
+   └─ sub-tile 3
+```
+
+```cpp
+#define TILES_MAXSIZE 2000000  // 单个 tile 最大 200 万像素（~1414×1414）
+
+bool TilesManager::Private::splitBigTiles(TileNode &tile, const NormalizedRect &rect)
+{
+    QRect tileRect = tile.rect.geometry(width, height);
+    if (tileRect.width() * tileRect.height() < TILES_MAXSIZE)
+        return false;
+    split(tile, rect);  // 递归 4 分
+    return true;
+}
+```
+
+#### 6.2.3 只渲染可见 tile
+
+Poppler generator 声明支持 `TiledRendering`：
+
+**文件：** `generators/poppler/generator_pdf.cpp:685`
+
+```cpp
+setFeature(TiledRendering);
+```
+
+渲染时只渲染单个 tile 的子区域：
+
+```cpp
+if (request->isTile()) {
+    const QRect rect = request->normalizedRect().geometry(request->width(), request->height());
+    img = p->renderToImage(fakeDpiX, fakeDpiY,
+                           rect.x(), rect.y(), rect.width(), rect.height(), ...);
+}
+```
+
+#### 6.2.4 内存驱逐策略
+
+**文件：** `core/tilesmanager.cpp:456-490`
+
+```cpp
+void TilesManager::cleanupPixmapMemory(qulonglong numberOfBytes,
+                                        const NormalizedRect &visibleRect,
+                                        int visiblePageNumber)
+{
+    // 按距离视口远近排序，最远的先驱逐
+    // 不驱逐当前可见的 tile
+    while (numberOfBytes > 0 && !rankedTiles.isEmpty()) {
+        TileNode *tile = rankedTiles.takeLast();
+        if (tile->rect.intersects(visibleRect))
+            continue;  // 跳过可见 tile
+        // 删除 tile 的 pixmap，释放内存
+    }
+}
+```
+
+#### 6.2.5 内存保护
+
+当单个 tile 请求面积超过 `100 × screenSize` 时，直接丢弃请求：
+
+**文件：** `core/document.cpp:1470-1477`
+
+```cpp
+if ((long)requestRect.width() * (long)requestRect.height() > 100L * screenSize
+    && SettingsCore::memoryLevel() != SettingsCore::EnumMemoryLevel::Greedy)
+{
+    // 丢弃请求，避免 OOM
+    delete r;
+}
+```
+
+### 6.3 对比总结
+
+| 方面 | Okular | 自定义管线（当前） |
+|------|--------|-------------------|
+| 缩放上限 | 10000%（有 tile） | 2048px cap（降质保性能） |
+| 高缩放策略 | 只渲染可见 tile（四叉树） | 渲染整页全分辨率位图 |
+| 缓存 key | 精确像素（tile 消除抖动） | 64px 对齐 |
+| 渐进式渲染 | 支持（tile 逐个上屏） | 不支持（整页一次性上屏） |
+| 内存管理 | tile 级驱逐（按视口距离） | LRU 整页驱逐 |
+| 激活条件 | 页面像素面积 > 4×屏幕面积 | 无 |
+| 退出条件 | 页面像素面积 < 3×屏幕面积 | 无 |
+
+### 6.4 实施分块渲染的改造范围
+
+若要实现 Okular 式分块渲染，需要改造以下组件：
+
+1. **PdfBitmapCache** — 缓存 key 从 `(pageIndex, pageWidth, pageHeight)` 扩展为 `(pageIndex, tileRect, tilePixelSize)`；驱逐策略从整页 LRU 改为 tile 级按视口距离驱逐
+2. **PdfPagePrimitive2D** — `create2DDecomposition()` 从产生单个 `BitmapPrimitive2D` 改为产生多个 tile 级 `BitmapPrimitive2D`；根据视口裁剪不可见 tile
+3. **PdfSharedDocument** — `renderPage()` 需要支持渲染页面子区域（传入裁剪矩形）
+4. **视口感知** — 需要在 `create2DDecomposition()` 中获取当前视口范围，只请求可见 tile
+
+改造复杂度较高，建议作为后续优化，当前的 2048px cap + 64px 对齐方案可作为过渡。
+
+---
+
 *文档基于 LibreOffice 25.8 core（loongarch64）和 Okular 主分支的源代码分析生成。*
