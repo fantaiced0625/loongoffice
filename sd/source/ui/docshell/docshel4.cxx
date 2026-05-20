@@ -561,7 +561,16 @@ bool DrawDocShell::ConvertFrom( SfxMedium& rMedium )
     {
         mpDoc->CreateFirstPages();
         mpDoc->StopWorkStartupDelay();
-        bRet = SdPdfFilter(rMedium, *this).Import();
+        // When the user clicks "Edit Document", SID_EDITDOC is set in the
+        // medium's item set.  Route through the filter framework
+        // (XmlFilterAdaptor → pdfimport extension → DrawPDFImport) so the PDF
+        // is parsed into individually editable draw objects instead of one
+        // SdrGrafObj per page.
+        const SfxBoolItem* pEditDocItem = rMedium.GetItemSet().GetItem(SID_EDITDOC, false);
+        if (pEditDocItem && pEditDocItem->GetValue())
+            bRet = SfxObjectShell::ImportFrom(rMedium, nullptr);
+        else
+            bRet = SdPdfFilter(rMedium, *this).Import();
     }
     else
     {

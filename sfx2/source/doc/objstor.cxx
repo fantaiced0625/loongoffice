@@ -736,10 +736,33 @@ bool SfxObjectShell::DoLoad( SfxMedium *pMed )
 
         if ( GetErrorIgnoreWarning() == ERRCODE_NONE )
         {
-            // PDF import via SdPdfFilter (direct to PDFium) instead of XmlFilterAdaptor (slow xpdfimport)
-            const bool bPdfiumImport
+            // PDF import routing:
+            // - First open (no SID_EDITDOC): use SdPdfFilter::Import() which
+            //   calls ImportFast() for a fast viewer-only pipeline.
+            // - Edit Document (SID_EDITDOC set): route through the filter
+            //   framework (XmlFilterAdaptor → pdfimport extension) so the PDF
+            //   is parsed into individually editable draw objects.
+            // - LOK or no poppler: always use SdPdfFilter (PDFium direct).
+            const bool bIsPdfDrawFilter
                 = pMedium->GetFilter()
                   && (pMedium->GetFilter()->GetFilterName() == "draw_pdf_import");
+            const SfxBoolItem* pEditDocItem = bIsPdfDrawFilter
+                ? pMedium->GetItemSet().GetItem(SID_EDITDOC, false) : nullptr;
+            const bool bEditDoc = pEditDocItem && pEditDocItem->GetValue();
+
+#if !HAVE_FEATURE_POPPLER
+            constexpr bool bUsePdfium = true;
+#else
+            const bool bUsePdfium
+                = comphelper::LibreOfficeKit::isActive() || getenv("LO_IMPORT_USE_PDFIUM");
+#endif
+            // Use SdPdfFilter (PDFium direct) when:
+            //  - bUsePdfium is true (LOK or no poppler), OR
+            //  - it's the first open (no SID_EDITDOC)
+            // Use filter framework (pdfimport extension) when:
+            //  - bUsePdfium is false AND SID_EDITDOC is set (edit mode)
+            const bool bPdfiumImport
+                = bIsPdfDrawFilter && (bUsePdfium || !bEditDoc);
 
             pImpl->nLoadedFlags = SfxLoadedFlags::NONE;
             pImpl->bModelInitialized = false;

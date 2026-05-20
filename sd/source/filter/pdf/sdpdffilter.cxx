@@ -19,7 +19,6 @@
 
 #include <sal/config.h>
 
-#include <cstdio>
 #include <cstdlib>
 #include <sfx2/docfile.hxx>
 #include <sfx2/sfxsids.hrc>
@@ -106,24 +105,20 @@ bool ImportFast(SdDrawDocument& rDocument, sd::DrawDocShell& rDocShell,
     rDocument.setLock(bWasLocked);
     rDocument.EnableUndo(bSavedUndoEnabled);
 
-    // Only set read-only UI if NOT in edit mode.
-    // When the user clicks "Edit Document", viewfrm.cxx adds SID_EDITDOC
-    // to the medium's item set before reloading, signaling that we should
-    // open as editable.
-    const SfxBoolItem* pEditItem = rDocShell.GetMedium()
-        ? rDocShell.GetMedium()->GetItemSet().GetItem(SID_EDITDOC, false)
-        : nullptr;
-    if (!pEditItem || !pEditItem->GetValue())
-    {
-        rDocShell.SetReadOnlyUI(true);
-        // Set full read-only locks to prevent editing, saving, exporting, etc.
-        SfxItemSet& rSet = rDocShell.GetMedium()->GetItemSet();
-        rSet.Put(SfxBoolItem(SID_LOCK_EDITDOC, true));
-        rSet.Put(SfxBoolItem(SID_LOCK_SAVE, true));
-        rSet.Put(SfxBoolItem(SID_LOCK_EXPORT, true));
-        rSet.Put(SfxBoolItem(SID_LOCK_CONTENT_EXTRACTION, true));
-        rDocShell.SetLoadReadonly(true);
-    }
+    // Set read-only UI for the fast viewer-only pipeline.
+    // When the user clicks "Edit Document", objstor.cxx routes through the
+    // filter framework (pdfimport extension) instead of calling this function.
+    rDocShell.SetReadOnlyUI(true);
+    // Set read-only locks to prevent editing, saving, exporting, etc.
+    // Do NOT set SID_LOCK_EDITDOC — it would propagate to model arg
+    // LockEditDoc, which would make isEditDocLocked() return true and
+    // hide the "Edit Document" infobar button.
+    SfxItemSet& rSet = rDocShell.GetMedium()->GetItemSet();
+    rSet.Put(SfxBoolItem(SID_LOCK_SAVE, true));
+    rSet.Put(SfxBoolItem(SID_LOCK_EXPORT, true));
+    rSet.Put(SfxBoolItem(SID_LOCK_CONTENT_EXTRACTION, true));
+    // Note: Do NOT call SetLoadReadonly(true) here, as it would suppress
+    // the "Edit Document" infobar by making IsSecurityOptOpenReadOnly() return true.
 
     pCache->prefetchFirstPages(std::min(6, nPageCount));
 
@@ -137,19 +132,12 @@ bool SdPdfFilter::Import()
     const OUString aFileName(
         mrMedium.GetURLObject().GetMainURL(INetURLObject::DecodeMechanism::NONE));
 
-    // First open: use fast viewer-only pipeline.
-    // Edit mode: set env LO_PDF_EDIT_MODE=1 or reload with SID_SILENT.
-    const SfxBoolItem* pSilentItem = mrMedium.GetItemSet().GetItem(SID_SILENT, false);
-    const bool bEditMode = (pSilentItem && pSilentItem->GetValue()) || getenv("LO_PDF_EDIT_MODE");
-    fprintf(stderr, "[SdPdfFilter] SID_SILENT=%s bEditMode=%d\n",
-            pSilentItem ? (pSilentItem->GetValue() ? "true" : "false") : "absent",
-            bEditMode ? 1 : 0);
-    if (!bEditMode)
+    // Fast viewer-only pipeline: each page is a cached bitmap (SdrPdfCachedPageObj).
+    // Edit mode goes through the filter framework (pdfimport extension) instead,
+    // so this function is only called for the fast viewer path.
+    // LO_PDF_EDIT_MODE=1 forces the old SdrGrafObj pipeline for debugging.
+    if (!getenv("LO_PDF_EDIT_MODE"))
         return ImportFast(mrDocument, mrDocShell, aFileName);
-
-    fprintf(stderr, "[SdPdfFilter] EDIT MODE: using original SdrGrafObj pipeline\n");
-
-    // ======== Original code below: edit mode via SdrGrafObj ========
 
     std::vector<vcl::PDFGraphicResult> aGraphics;
     if (vcl::ImportPDFUnloaded(aFileName, aGraphics) == 0)

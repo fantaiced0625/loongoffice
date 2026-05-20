@@ -75,10 +75,10 @@ void PdfBitmapCache::addToCache(const RenderKey& rKey, const BitmapEx& rBitmap)
                     * static_cast<size_t>(rBitmap.GetSizePixel().Height()) * 4;
 
     if (m_CurrentMemory + nMemSize > MAX_MEMORY)
-        evictLRU(MAX_MEMORY - nMemSize);
+        evictLRU(nMemSize >= MAX_MEMORY ? 0 : (MAX_MEMORY - nMemSize));
 
-    m_Cache[rKey] = { rBitmap, nMemSize };
     m_LRUList.push_front(rKey);
+    m_Cache[rKey] = { rBitmap, nMemSize, m_LRUList.begin() };
     m_CurrentMemory += nMemSize;
 
     // Increment generation so PdfPagePrimitive2D::operator== detects the change
@@ -102,8 +102,8 @@ BitmapEx PdfBitmapCache::getOrRender(int nPage, const Size& rPixelSize)
         auto it = m_Cache.find(aKey);
         if (it != m_Cache.end())
         {
-            m_LRUList.remove(aKey);
-            m_LRUList.push_front(aKey);
+            // LRU: move to front in O(1) using stored iterator
+            m_LRUList.splice(m_LRUList.begin(), m_LRUList, it->second.lruIt);
             return it->second.bitmap;
         }
 
@@ -170,7 +170,10 @@ void PdfBitmapCache::postRepaintEvent()
         return;
 
     auto* pData = new RepaintEventData{ std::move(aCallbacks) };
-    Application::PostUserEvent(LINK_NONMEMBER(nullptr, invokeRepaintCallbacks), pData);
+    ImplSVEvent* pEvent = Application::PostUserEvent(
+        LINK_NONMEMBER(nullptr, invokeRepaintCallbacks), pData);
+    if (!pEvent)
+        delete pData; // event posting failed, clean up
 }
 
 void PdfBitmapCache::evictLRU(size_t targetMemory)

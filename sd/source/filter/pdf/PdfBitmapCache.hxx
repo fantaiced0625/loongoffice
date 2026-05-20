@@ -62,6 +62,7 @@ private:
     struct CachedBitmap {
         BitmapEx bitmap;
         size_t memorySize;
+        std::list<RenderKey>::iterator lruIt; // O(1) LRU removal
     };
 
     static constexpr size_t MAX_MEMORY = 100 * 1024 * 1024; // 100 MB

@@ -20,7 +20,6 @@
 #include <config_feature_desktop.h>
 #include <config_wasm_strip.h>
 
-#include <cstdio>
 #include <o3tl/test_info.hxx>
 #include <osl/file.hxx>
 #include <sfx2/docfilt.hxx>
@@ -409,7 +408,7 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                 if ( !pSh->IsReadOnlyMedium() )
                 {
                     // For PDF viewer (fast import pipeline), we must do a full
-                    // reload to switch to the editable SdrGrafObj pipeline.
+                    // reload to switch to the pdfimport extension pipeline.
                     // For all other formats, just flip the open mode.
                     bool bIsPdfViewer = pMed->GetFilter()
                         && pMed->GetFilter()->GetName() == "draw_pdf_import";
@@ -421,8 +420,9 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                         pMed->SetOpenMode( nOpenMode );
                         return;
                     }
-                    // fall through to full reload below
-                    fprintf(stderr, "[ExecReload] draw_pdf_import: skipping early return, forcing full reload\n");
+                    // PDF viewer: fall through to full reload, which will route
+                    // through the filter framework (pdfimport extension) because
+                    // SID_EDITDOC is set in the medium's item set.
                 }
             }
 
@@ -619,8 +619,8 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                         rReq.Done( true );
                         return;
                     }
-                    // fall through to full reload below
-                    fprintf(stderr, "[ExecReload] draw_pdf_import: falling through to SID_RELOAD\n");
+                    // PDF viewer: fall through to SID_RELOAD to switch pipelines
+                    SAL_WARN("sfx.view", "ExecReload_Impl: PDF viewer detected, falling through to SID_RELOAD");
                 }
             }
 
@@ -633,7 +633,14 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
             // For PDF viewer edit: propagate edit intent so ImportFast()
             // knows to skip SetReadOnlyUI(true).
             if ( rReq.GetSlot() == SID_EDITDOC )
+            {
                 rReq.AppendItem( SfxBoolItem( SID_EDITDOC, true ) );
+                // Also put SID_EDITDOC into the medium's item set so it
+                // propagates to the reloaded document's medium, allowing
+                // DrawDocShell::ConvertFrom() to route through the
+                // XmlFilterAdaptor/pdfimport extension instead of SdPdfFilter.
+                pMed->GetItemSet().Put( SfxBoolItem( SID_EDITDOC, true ) );
+            }
 
             [[fallthrough]]; //TODO ???
         }
@@ -824,6 +831,27 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                 TransformItems( SID_OPENDOC, *pNewSet, aLoadArgs );
                 try
                 {
+                    // Show a progress bar during the (potentially slow) reload.
+                    // For PDF edit mode this goes through the pdfimport extension
+                    // which can take a while for large documents.
+                    // Use xOldObj (still connected to the view frame) for the
+                    // progress display — xNewObj is not yet attached to any frame.
+                    // Show progress during the (potentially slow) reload.
+                    // For PDF edit mode this goes through the pdfimport extension.
+                    std::unique_ptr<SfxProgress> pProgress;
+                    std::unique_ptr<weld::WaitObject> pWait;
+                    if ( rReq.GetSlot() == SID_EDITDOC )
+                    {
+                        pProgress.reset( new SfxProgress(
+                            xOldObj,
+                            u"Loading document for editing..."_ustr,
+                            100,
+                            true ) );
+                        pProgress->SetState( 0 );
+                        pWait.reset( new weld::WaitObject(
+                            GetWindow().GetFrameWeld() ) );
+                    }
+
                     uno::Reference < frame::XLoadable > xLoad( xNewObj->GetModel(), uno::UNO_QUERY );
                     xLoad->load( aLoadArgs );
                 }
@@ -869,6 +897,11 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                     // the Reload and Silent items were only temporary, remove them
                     xNewObj->GetMedium()->GetItemSet().ClearItem( SID_RELOAD );
                     xNewObj->GetMedium()->GetItemSet().ClearItem( SID_SILENT );
+                    // Clear locks set by ImportFast (viewer-only mode)
+                    xNewObj->GetMedium()->GetItemSet().ClearItem( SID_LOCK_SAVE );
+                    xNewObj->GetMedium()->GetItemSet().ClearItem( SID_LOCK_EXPORT );
+                    xNewObj->GetMedium()->GetItemSet().ClearItem( SID_LOCK_CONTENT_EXTRACTION );
+                    xNewObj->GetMedium()->GetItemSet().ClearItem( SID_EDITDOC );
                     TransformItems( SID_OPENDOC, xNewObj->GetMedium()->GetItemSet(), aLoadArgs );
 
                     UpdateDocument_Impl();
@@ -893,6 +926,14 @@ void SfxViewFrame::ExecReload_Impl( SfxRequest& rReq )
                             LoadViewIntoFrame_Impl( *xNewObj, viewFrame.first, aLoadArgs, viewFrame.second, false );
                         }
                         aViewFrames.clear();
+
+                        // After loading the new view, explicitly broadcast
+                        // ModeChanged on the new object so the UI refreshes
+                        // its read-only/editable state.  The
+                        // ReadOnlyUIGuard destructor broadcasts on the OLD
+                        // object, but the frame is now connected to xNewObj.
+                        if ( rReq.GetSlot() == SID_EDITDOC || rReq.GetSlot() == SID_READONLYDOC )
+                            xNewObj->Broadcast( SfxHint(SfxHintId::ModeChanged) );
                     }
                     catch( const Exception& )
                     {

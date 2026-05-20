@@ -425,7 +425,14 @@ bool SfxObjectShell::IsSignPDF() const
     {
         const std::shared_ptr<const SfxFilter>& pFilter = pMedium->GetFilter();
         if (pFilter && pFilter->GetName() == "draw_pdf_import")
+        {
+            // Viewer-only mode (ImportFast) sets SID_LOCK_SAVE; sign-PDF
+            // sessions (SID_SIGNPDF) do not lock saving.
+            const SfxBoolItem* pLockSave = pMedium->GetItemSet().GetItem(SID_LOCK_SAVE, false);
+            if (pLockSave && pLockSave->GetValue())
+                return false;
             return true;
+        }
     }
 
     return false;
