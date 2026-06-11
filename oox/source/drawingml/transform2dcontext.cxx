@@ -393,7 +393,10 @@ ContextHandlerRef Transform2DContext::onCreateContext( sal_Int32 aElementToken, 
     switch( aElementToken )
     {
     case A_TOKEN( off ):        // horz/vert translation
-        mrShape.setPosition( awt::Point( rAttribs.getInteger( XML_x, 0 ), rAttribs.getInteger( XML_y, 0 ) ) );
+        //Only set position if shape is at origin OR has no external drawings
+        if(!((mrShape.getPosition().X!=0 || mrShape.getPosition().Y!=0)&&!mrShape.getExtDrawings().empty())){
+            mrShape.setPosition( awt::Point( rAttribs.getInteger( XML_x, 0 ), rAttribs.getInteger( XML_y, 0 ) ) );
+        }
         break;
     case A_TOKEN( ext ):        // horz/vert size
         mrShape.setSize( awt::Size( rAttribs.getInteger( XML_cx, 0 ), rAttribs.getInteger( XML_cy, 0 ) ) );
